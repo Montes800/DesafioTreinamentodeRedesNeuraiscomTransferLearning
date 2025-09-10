@@ -1,0 +1,110 @@
+# Ativa a exibição de gráficos direto no notebook 1
+%matplotlib inline
+
+# Bibliotecas padrão
+import os, random
+import numpy as np
+import matplotlib.pyplot as plt
+
+# TensorFlow e Keras
+import tensorflow as tf
+import tensorflow_datasets as tfds
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Dropout, Flatten, Activation
+from tensorflow.keras.layers import Conv2D, MaxPooling2D
+from tensorflow.keras.utils import to_categorical
+
+# Carregar o dataset diretamente do TFDS 2
+(ds_train, ds_test), ds_info = tfds.load(
+    'colorectal_histology',
+    split=['train[:80%]', 'train[80%:]'], # 80% treino, 20% teste
+    shuffle_files=True,
+    as_supervised=True, # retorna tuplas (imagem, label)
+    with_info=True
+)
+
+# Número de classes
+num_classes = ds_info.features['label'].num_classes
+print("Número de classes:", num_classes)
+
+#Pré-processamento das imagens 3
+IMG_SIZE = 150  # todas imagens já são 150x150x3
+
+def normalize_img(image, label):
+    """Normaliza imagens para [0,1]"""
+    return tf.cast(image, tf.float32) / 255.0, label
+
+# Aplicando normalização
+ds_train = ds_train.map(normalize_img, num_parallel_calls=tf.data.AUTOTUNE)
+ds_test = ds_test.map(normalize_img, num_parallel_calls=tf.data.AUTOTUNE)
+
+# Preparando os datasets em lotes
+ds_train = ds_train.cache().shuffle(1000).batch(128).prefetch(tf.data.AUTOTUNE)
+ds_test = ds_test.batch(128).cache().prefetch(tf.data.AUTOTUNE)
+
+# Visualização de exemplos 4 
+for image, label in ds_train.take(1):
+    plt.imshow(image[0])
+    plt.title(f"Classe: {label[0].numpy()}")
+    plt.show()
+
+# Criando CNN 5
+model = Sequential()
+
+# Primeira camada convolucional
+model.add(Conv2D(32, (3, 3), activation='relu', input_shape=(IMG_SIZE, IMG_SIZE, 3)))
+model.add(MaxPooling2D(pool_size=(2, 2)))
+
+# Segunda camada convolucional
+model.add(Conv2D(64, (3, 3), activation='relu'))
+model.add(MaxPooling2D(pool_size=(2, 2)))
+
+# Terceira camada convolucional
+model.add(Conv2D(128, (3, 3), activation='relu'))
+model.add(MaxPooling2D(pool_size=(2, 2)))
+
+# Flatten transforma matriz em vetor
+model.add(Flatten())
+
+# Camada totalmente conectada
+model.add(Dense(256, activation='relu'))
+model.add(Dropout(0.5))
+
+# Camada de saída (8 classes)
+model.add(Dense(num_classes, activation='softmax'))
+
+# Resumo da arquitetura
+model.summary()
+
+# Compilando o modelo 6 
+model.compile(
+    loss='sparse_categorical_crossentropy', # como rótulos não são one-hot
+    optimizer='adam',
+    metrics=['accuracy']
+)
+
+# Treinamento 7 
+
+history = model.fit(
+    ds_train,
+    validation_data=ds_test,
+    epochs=10
+)
+
+# Avaliação do modelo 8
+loss, acc = model.evaluate(ds_test)
+print("Acurácia no conjunto de teste:", acc)
+
+# Grafico de Performace 9
+
+plt.plot(history.history['accuracy'], label='Treino')
+plt.plot(history.history['val_accuracy'], label='Validação')
+plt.title("Evolução da Acurácia")
+plt.xlabel("Épocas")
+plt.ylabel("Acurácia")
+plt.legend()
+plt.show()
+
+
+
+
